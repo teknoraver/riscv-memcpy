@@ -9,7 +9,11 @@
 #define REG_L		__REG_SEL(ld, lw)
 #define REG_S		__REG_SEL(sd, sw)
 
-.globl __memcpy
+.text
+
+.global __memcpy
+
+__memcpy:
 	move t6, a0  /* Preserve return value */
 
 	/* Defer to byte-oriented copy for small sizes */
