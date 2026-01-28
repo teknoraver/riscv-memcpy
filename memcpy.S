@@ -143,12 +143,12 @@ __memcpy:
 .Lshifted_loop:
 	REG_L t1, SZREG(a1)	/* Load next aligned word */
 	srl t2, t0, a4		/* Shift right: low part from current word */
-	sll t3, t1, a5		/* Shift left: high part from next word */
-	or t2, t2, t3		/* Combine to form output word */
-	REG_S t2, 0(t6)		/* Store to aligned dest */
 	mv t0, t1		/* Current = next for next iteration */
 	addi a1, a1, SZREG
 	addi t6, t6, SZREG
+	sll t3, t0, a5		/* Shift left: high part from next word */
+	or t2, t2, t3		/* Combine to form output word */
+	REG_S t2, -SZREG(t6)	/* Store to aligned dest */
 	bltu t6, a6, .Lshifted_loop
 
 	/* Restore src to correct unaligned position */
@@ -170,8 +170,8 @@ __memcpy:
 7:
 	lw a4, 0(a1)
 	addi a1, a1, 4
-	sw a4, 0(t6)
 	addi t6, t6, 4
+	sw a4, -4(t6)
 	bltu a1, a3, 7b
 
 	ret
@@ -179,8 +179,8 @@ __memcpy:
 5:
 	lb a4, 0(a1)
 	addi a1, a1, 1
-	sb a4, 0(t6)
 	addi t6, t6, 1
+	sb a4, -1(t6)
 	bltu a1, a3, 5b
 6:
 	ret
