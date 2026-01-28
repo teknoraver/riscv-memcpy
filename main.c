@@ -6,15 +6,19 @@
 
 extern void *__memcpy(void *, const void *, size_t);
 
+static int err;
+
 int test(char *buf1, char *buf2, size_t size)
 {
 	for (int i = 0; i < size; i++)
 		buf1[i] = random();
 
 	__memcpy(buf2, buf1, size);
-
-	if (memcmp(buf1, buf2, size))
+	
+	if (memcmp(buf1, buf2, size)) {
+		err = 1;
 		printf("!differ, size: %lu, alignment: %ld\n", size, (buf1 - buf2) & 7);
+	}
 
 	return 0;
 }
@@ -40,5 +44,5 @@ int main(int argc, char *argv[])
 	test(buf1, buf2+1, 40);
 	test(buf1+3, buf2+1, 40);
 
-	return 0;
+	return err;
 }
