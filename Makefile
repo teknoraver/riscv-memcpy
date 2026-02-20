@@ -1,5 +1,5 @@
 CFLAGS := -O2 -pipe -Wall
-ASFLAGS := $(CFLAGS)
+ASFLAGS := $(CFLAGS) -march=rv64gv
 
 testmemcpy: main.o memcpy.o
 	$(CC) ${CFLAGS} $^ -o $@
