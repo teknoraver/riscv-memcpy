@@ -18,9 +18,9 @@
 
 #define CSR_VSTART		0x8
 
-.global __memcpy
+.global memcpy_v
 
-__memcpy:
+memcpy_v:
 loop:
 	vsetvli iVL, iNum, e8, ELEM_LMUL_SETTING, ta, ma
 	vle8.v vData, (pSrc)
