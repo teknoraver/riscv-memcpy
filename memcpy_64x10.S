@@ -11,9 +11,9 @@
 
 .text
 
-.global __memcpy
+.global memcpy_64x10
 
-__memcpy:
+memcpy_64x10:
 	move t6, a0  /* Preserve return value */
 
 	/* Check alignment first */
