@@ -12,7 +12,7 @@
 
 typedef void *(memcpy_t)(void *, const void *, size_t);
 
-extern memcpy_t memcpy_64x10, memcpy_csky, memcpy_shifted, memcpy_shifted_noshort, memcpy_v;
+extern memcpy_t memcpy_64x10, memcpy_csky, memcpy_shifted, memcpy_shifted_noshort, memcpy_shifted_bl2, memcpy_v;
 
 static struct memcpy_func {
 	const char *name;
@@ -25,6 +25,7 @@ static struct memcpy_func {
 	{ "memcpy by csky", "csky", memcpy_csky },
 	{ "memcpy shifted (glibc patch)", "shifted", memcpy_shifted },
 	{ "memcpy shifted, byte loop below 16", "noshort", memcpy_shifted_noshort },
+	{ "memcpy shifted, 2-byte loop below 16", "bl2", memcpy_shifted_bl2 },
 	{ "memcpy vector", "vector", memcpy_v },
 };
 

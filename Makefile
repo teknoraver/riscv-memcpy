@@ -14,4 +14,8 @@ test:: testmemcpy
 	./testmemcpy
 
 clean::
-	$(RM) *.o testmemcpy
+	$(RM) *.o testmemcpy len2
+
+# fixed-length call loop, for perf stat: ./len2 <libc|noshort|shifted|2> <len>
+len2: len2.o $(memcpys_obj)
+	$(CC) ${CFLAGS} $^ -o $@
