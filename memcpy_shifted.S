@@ -22,19 +22,42 @@ memcpy_shifted:
 	li	a3, 2*SZREG
 	bltu	a2, a3, L(byte_copy)
 
-	/* Byte copy (-DEST) & (SZREG-1) bytes to align DEST.  */
+	/* Copy a3 = (-DEST) & (SZREG-1) bytes to align DEST, in blocks of
+	   1, 2 and 4 bytes selected by the bits of a3.  */
 	neg	a3, a0
 	andi	a3, a3, SZREG-1
 	beqz	a3, L(dst_aligned)
 	sub	a2, a2, a3
-	add	a4, a6, a3
-	.p2align 4
-L(align_loop):
+	andi	a4, a3, 1
+	beqz	a4, 1f
 	lbu	a5, 0(a1)
-	addi	a1, a1, 1
 	sb	a5, 0(a6)
+	addi	a1, a1, 1
 	addi	a6, a6, 1
-	bne	a6, a4, L(align_loop)
+1:
+	andi	a4, a3, 2
+	beqz	a4, 2f
+	lbu	a4, 0(a1)
+	lbu	a5, 1(a1)
+	sb	a4, 0(a6)
+	sb	a5, 1(a6)
+	addi	a1, a1, 2
+	addi	a6, a6, 2
+2:
+# if SZREG == 8
+	andi	a4, a3, 4
+	beqz	a4, L(dst_aligned)
+	lbu	a4, 0(a1)
+	lbu	a5, 1(a1)
+	lbu	t0, 2(a1)
+	lbu	t1, 3(a1)
+	sb	a4, 0(a6)
+	sb	a5, 1(a6)
+	sb	t0, 2(a6)
+	sb	t1, 3(a6)
+	addi	a1, a1, 4
+	addi	a6, a6, 4
+# endif
 
 L(dst_aligned):
 	/* DEST is aligned, LEN > SZREG.  */
@@ -184,17 +207,58 @@ L(shifted_tail):
 	add	a1, a1, a3
 	andi	a2, a2, SZREG-1
 
-	/* Copy the remaining LEN bytes.  */
+	/* Copy the remaining 0 <= LEN < 2 * SZREG bytes in blocks of 8, 4,
+	   2 and 1 bytes selected by the bits of LEN.  */
 L(byte_copy):
-	beqz	a2, L(ret)
-	add	a7, a6, a2
-	.p2align 4
-L(byte_loop):
+# if SZREG == 8
+	andi	a3, a2, 8
+	beqz	a3, 1f
 	lbu	a3, 0(a1)
-	addi	a1, a1, 1
+	lbu	a4, 1(a1)
+	lbu	a5, 2(a1)
+	lbu	a7, 3(a1)
 	sb	a3, 0(a6)
-	addi	a6, a6, 1
-	bne	a6, a7, L(byte_loop)
+	sb	a4, 1(a6)
+	sb	a5, 2(a6)
+	sb	a7, 3(a6)
+	lbu	a3, 4(a1)
+	lbu	a4, 5(a1)
+	lbu	a5, 6(a1)
+	lbu	a7, 7(a1)
+	sb	a3, 4(a6)
+	sb	a4, 5(a6)
+	sb	a5, 6(a6)
+	sb	a7, 7(a6)
+	addi	a1, a1, 8
+	addi	a6, a6, 8
+1:
+# endif
+	andi	a3, a2, 4
+	beqz	a3, 2f
+	lbu	a3, 0(a1)
+	lbu	a4, 1(a1)
+	lbu	a5, 2(a1)
+	lbu	a7, 3(a1)
+	sb	a3, 0(a6)
+	sb	a4, 1(a6)
+	sb	a5, 2(a6)
+	sb	a7, 3(a6)
+	addi	a1, a1, 4
+	addi	a6, a6, 4
+2:
+	andi	a3, a2, 2
+	beqz	a3, 3f
+	lbu	a3, 0(a1)
+	lbu	a4, 1(a1)
+	sb	a3, 0(a6)
+	sb	a4, 1(a6)
+	addi	a1, a1, 2
+	addi	a6, a6, 2
+3:
+	andi	a3, a2, 1
+	beqz	a3, L(ret)
+	lbu	a3, 0(a1)
+	sb	a3, 0(a6)
 L(ret):
 	ret
 	.size	memcpy_shifted, .-memcpy_shifted

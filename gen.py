@@ -47,7 +47,9 @@ L(ret):
 	ret
 """
 
-assert body.count(HEAD) == 1 and body.count(BYTE_COPY) == 1
+# The variants patch the byte loops of the glibc code as of fbcb359b5c; once
+# glibc has other code there only memcpy_shifted.S is regenerated.
+patchable = body.count(HEAD) == 1 and body.count(BYTE_COPY) == 1
 
 
 def copy(n, regs=("a3", "a4", "a5", "a7")):
@@ -176,6 +178,9 @@ variants = {
     "memcpy_shifted_jt": ("Variant: computed jump into unrolled byte copies below 16 bytes, head as in bits.",
                           body.replace(BYTE_COPY, JT).replace(HEAD, BITS_HEAD)),
 }
+
+if not patchable:
+    variants = {"memcpy_shifted": variants["memcpy_shifted"]}
 
 for name, (desc, code) in variants.items():
     with open(f"{name}.S", "w") as f:
