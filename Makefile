@@ -16,6 +16,6 @@ test:: testmemcpy
 clean::
 	$(RM) *.o testmemcpy len2
 
-# fixed-length call loop, for perf stat: ./len2 <libc|noshort|shifted|2> <len>
+# fixed-length call loop, for perf stat: ./len2 <tag> <len> [doff] [soff]
 len2: len2.o $(memcpys_obj)
 	$(CC) ${CFLAGS} $^ -o $@

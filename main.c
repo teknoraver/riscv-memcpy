@@ -12,7 +12,8 @@
 
 typedef void *(memcpy_t)(void *, const void *, size_t);
 
-extern memcpy_t memcpy_64x10, memcpy_csky, memcpy_shifted, memcpy_shifted_noshort, memcpy_shifted_bl2, memcpy_v;
+extern memcpy_t memcpy_64x10, memcpy_csky, memcpy_shifted, memcpy_shifted_bl2,
+	memcpy_shifted_bits, memcpy_shifted_jt, memcpy_v;
 
 static struct memcpy_func {
 	const char *name;
@@ -24,8 +25,9 @@ static struct memcpy_func {
 	{ "memcpy using 10+6 registers", "64x10", memcpy_64x10 },
 	{ "memcpy by csky", "csky", memcpy_csky },
 	{ "memcpy shifted (glibc patch)", "shifted", memcpy_shifted },
-	{ "memcpy shifted, byte loop below 16", "noshort", memcpy_shifted_noshort },
 	{ "memcpy shifted, 2-byte loop below 16", "bl2", memcpy_shifted_bl2 },
+	{ "memcpy shifted, 8/4/2/1 blocks below 16", "bits", memcpy_shifted_bits },
+	{ "memcpy shifted, jump table below 16", "jt", memcpy_shifted_jt },
 	{ "memcpy vector", "vector", memcpy_v },
 };
 
@@ -311,6 +313,76 @@ static void bench_sizes(void)
 	free(dst);
 }
 
+/*
+ * Calls with random lengths in [0, RANGE) and random SRC and DEST
+ * alignments, so that branches on the length are not predictable.
+ */
+#define NRAND		4096
+
+static void bench_random(void)
+{
+	static const size_t ranges[] = { 8, 16, 32, 64, 256, 1024 };
+	static unsigned short lens[NRAND];
+	static unsigned char soff[NRAND], doff[NRAND];
+	char *src = aligned_alloc(64, 2048), *dst = aligned_alloc(64, 2048);
+
+	memset(src, 1, 2048);
+	memset(dst, 2, 2048);
+
+	printf("\nrandom length in [0, range), random alignments, ns per call (time relative to %s)\n\n%8s",
+	       memcpys[0].tag, "range");
+	for (size_t f = 0; f < NFUNCS; f++)
+		if (!memcpys[f].skip)
+			printf("  %15s", memcpys[f].tag);
+	printf("\n");
+
+	for (size_t r = 0; r < sizeof(ranges) / sizeof(ranges[0]); r++) {
+		long passes = ranges[r] <= 64 ? 50 : 4096 / ranges[r];
+		double base = 0;
+
+		srandom(r + 1);
+		for (int i = 0; i < NRAND; i++) {
+			lens[i] = random() % ranges[r];
+			soff[i] = random() % 8;
+			doff[i] = random() % 8;
+		}
+
+		printf("%8zu", ranges[r]);
+		for (size_t f = 0; f < NFUNCS; f++) {
+			memcpy_t *volatile vf = memcpys[f].func;
+			memcpy_t *fn = vf;
+			double t[SAMPLES];
+
+			if (memcpys[f].skip)
+				continue;
+			for (int i = 0; i < NRAND; i++)	/* warm up */
+				fn(dst + doff[i], src + soff[i], lens[i]);
+			for (int s = 0; s < SAMPLES; s++) {
+				struct timespec start, end;
+
+				clock_gettime(CLOCK_MONOTONIC, &start);
+				for (long p = 0; p < passes; p++)
+					for (int i = 0; i < NRAND; i++)
+						fn(dst + doff[i], src + soff[i], lens[i]);
+				clock_gettime(CLOCK_MONOTONIC, &end);
+				t[s] = ((end.tv_sec - start.tv_sec) * 1e9 +
+					(end.tv_nsec - start.tv_nsec)) / (passes * NRAND);
+			}
+			qsort(t, SAMPLES, sizeof(t[0]), cmp_double);
+			if (!base)
+				base = t[SAMPLES / 2];
+			if (f)
+				printf("  %8.1f (%4.2f)", t[SAMPLES / 2], t[SAMPLES / 2] / base);
+			else
+				printf("  %15.1f", t[SAMPLES / 2]);
+		}
+		printf("\n");
+	}
+
+	free(src);
+	free(dst);
+}
+
 int test_func(memcpy_t func, int large)
 {
 	if (tests(func) || test_exhaustive(func) || test_overread(func))
@@ -327,25 +399,48 @@ int test_func(memcpy_t func, int large)
 
 int main(int argc, char *argv[])
 {
-	int opt, large = 1, small = 1;
+	int opt, large = 0, small = 0, rnd = 0;
+	char *only = NULL;
 
-	while ((opt = getopt(argc, argv, "ls")) != -1) {
+	while ((opt = getopt(argc, argv, "lsrf:")) != -1) {
 		switch (opt) {
-		case 'l':	/* only the 128 MiB benchmark */
-			small = 0;
+		case 'l':	/* the 128 MiB benchmark */
+			large = 1;
 			break;
-		case 's':	/* only the per-size benchmark */
-			large = 0;
+		case 's':	/* the per-size benchmark */
+			small = 1;
+			break;
+		case 'r':	/* the random length benchmark */
+			rnd = 1;
+			break;
+		case 'f':	/* only these functions (comma separated tags) */
+			only = optarg;
 			break;
 		default:
-			fprintf(stderr, "usage: %s [-l | -s]\n", argv[0]);
+			fprintf(stderr, "usage: %s [-l] [-s] [-r] [-f tag,tag...]\n"
+				"  no -l/-s/-r: run all benchmarks; libc is always included\n",
+				argv[0]);
 			return 1;
 		}
+	}
+	if (!large && !small && !rnd)
+		large = small = rnd = 1;
+
+	for (size_t i = 1; only && i < NFUNCS; i++) {
+		char list[256];
+
+		snprintf(list, sizeof(list), ",%s,", only);
+		char tag[32];
+		snprintf(tag, sizeof(tag), ",%s,", memcpys[i].tag);
+		if (!strstr(list, tag))
+			memcpys[i].skip = 1;
 	}
 
 	signal(SIGILL, sigill_handler);
 
 	for (size_t i = 0; i < NFUNCS; i++) {
+		if (memcpys[i].skip)
+			continue;
 		printf("Testing %s...\n", memcpys[i].name);
 		if (sigsetjmp(jmp_env, 1)) {
 			printf("%s: SIGILL, skipping\n", memcpys[i].name);
@@ -358,6 +453,8 @@ int main(int argc, char *argv[])
 
 	if (small)
 		bench_sizes();
+	if (rnd)
+		bench_random();
 
 	return 0;
 }
