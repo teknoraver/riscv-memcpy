@@ -10,6 +10,8 @@
 #include <sys/mman.h>
 #include <sys/wait.h>
 
+#include "spec_freq.h"
+
 typedef void *(memcpy_t)(void *, const void *, size_t);
 
 extern memcpy_t memcpy_64x10, memcpy_csky, memcpy_shifted, memcpy_shifted_bl2,
@@ -383,6 +385,88 @@ static void bench_random(void)
 	free(dst);
 }
 
+/*
+ * Like glibc's bench-memcpy-random: sizes and alignments follow the
+ * memcpy calls in SPEC2017, SRC and DEST are random offsets in a region
+ * of the given size, rounded down to the chosen alignment.
+ */
+#define NSPEC		8192
+
+static void bench_spec(void)
+{
+	static const size_t regions[] = { 4096, 32768, 262144 };
+	static uint16_t sizes_arr[65536];
+	static uint8_t salign[1024], dalign[1024];
+	static struct { uint32_t src, dst, len; } t[NSPEC];
+	size_t n, nsz, nsa, nda;
+	char *src = aligned_alloc(4096, 262144 + 8192);
+	char *dst = aligned_alloc(4096, 262144 + 8192);
+
+	memset(src, 1, 262144 + 8192);
+	memset(dst, 2, 262144 + 8192);
+	for (n = nsz = 0; size_freq[n].freq; n++)
+		for (int j = 0; j < size_freq[n].freq; j++)
+			sizes_arr[nsz++] = size_freq[n].size;
+	for (n = nsa = 0; src_align_freq[n].freq; n++)
+		for (int j = 0; j < src_align_freq[n].freq; j++)
+			salign[nsa++] = src_align_freq[n].align - 1;
+	for (n = nda = 0; dst_align_freq[n].freq; n++)
+		for (int j = 0; j < dst_align_freq[n].freq; j++)
+			dalign[nda++] = dst_align_freq[n].align - 1;
+
+	printf("\nSPEC2017 sizes and alignments (bench-memcpy-random), ns per call (time relative to %s)\n\n%8s",
+	       memcpys[0].tag, "region");
+	for (size_t f = 0; f < NFUNCS; f++)
+		if (!memcpys[f].skip)
+			printf("  %15s", memcpys[f].tag);
+	printf("\n");
+
+	for (size_t r = 0; r < sizeof(regions) / sizeof(regions[0]); r++) {
+		double base = 0;
+
+		srandom(r + 1);
+		for (int i = 0; i < NSPEC; i++) {
+			t[i].dst = (random() % regions[r]) & ~dalign[random() % nda];
+			t[i].src = (random() % regions[r]) & ~salign[random() % nsa];
+			t[i].len = sizes_arr[random() % nsz];
+		}
+
+		printf("%8zu", regions[r]);
+		for (size_t f = 0; f < NFUNCS; f++) {
+			memcpy_t *volatile vf = memcpys[f].func;
+			memcpy_t *fn = vf;
+			double tm[SAMPLES];
+
+			if (memcpys[f].skip)
+				continue;
+			for (int i = 0; i < NSPEC; i++)	/* warm up */
+				fn(dst + t[i].dst, src + t[i].src, t[i].len);
+			for (int s = 0; s < SAMPLES; s++) {
+				struct timespec start, end;
+
+				clock_gettime(CLOCK_MONOTONIC, &start);
+				for (int p = 0; p < 20; p++)
+					for (int i = 0; i < NSPEC; i++)
+						fn(dst + t[i].dst, src + t[i].src, t[i].len);
+				clock_gettime(CLOCK_MONOTONIC, &end);
+				tm[s] = ((end.tv_sec - start.tv_sec) * 1e9 +
+					 (end.tv_nsec - start.tv_nsec)) / (20 * NSPEC);
+			}
+			qsort(tm, SAMPLES, sizeof(tm[0]), cmp_double);
+			if (!base)
+				base = tm[SAMPLES / 2];
+			if (f)
+				printf("  %8.1f (%4.2f)", tm[SAMPLES / 2], tm[SAMPLES / 2] / base);
+			else
+				printf("  %15.1f", tm[SAMPLES / 2]);
+		}
+		printf("\n");
+	}
+
+	free(src);
+	free(dst);
+}
+
 int test_func(memcpy_t func, int large)
 {
 	if (tests(func) || test_exhaustive(func) || test_overread(func))
@@ -453,8 +537,10 @@ int main(int argc, char *argv[])
 
 	if (small)
 		bench_sizes();
-	if (rnd)
+	if (rnd) {
 		bench_random();
+		bench_spec();
+	}
 
 	return 0;
 }
