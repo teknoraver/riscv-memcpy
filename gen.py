@@ -226,8 +226,8 @@ L(shifted_4):
         ent = re.search(r"\tREG_L\ta4, 0\(a1\)\n\tbeq\ta6, t4, L\(shifted_word\)\n", body).group(0)
         code = body.replace(ent, f"""\
 	REG_L	a4, 0(a1)
-	li	a3, {thr}
-	bgeu	a2, a3, L(shifted_big)
+	li	t3, {thr}
+	bgeu	a2, t3, L(shifted_big)
 L(shifted_4check):
 	beq	a6, t4, L(shifted_word)
 """)

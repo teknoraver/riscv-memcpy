@@ -163,8 +163,8 @@ L(shifted):
 	add	t4, a6, t4
 	/* a4 = the current aligned source word.  */
 	REG_L	a4, 0(a1)
-	li	a3, 256
-	bgeu	a2, a3, L(shifted_big)
+	li	t3, 256
+	bgeu	a2, t3, L(shifted_big)
 L(shifted_4check):
 	beq	a6, t4, L(shifted_word)
 	.p2align 4
