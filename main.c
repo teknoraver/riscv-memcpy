@@ -15,7 +15,8 @@
 typedef void *(memcpy_t)(void *, const void *, size_t);
 
 extern memcpy_t memcpy_64x10, memcpy_csky, memcpy_shifted, memcpy_shifted_loop, memcpy_shifted_bl2,
-	memcpy_shifted_bits, memcpy_shifted_jt, memcpy_shifted_u8, memcpy_shifted_u8n, memcpy_shifted_h256, memcpy_shifted_h512, memcpy_v;
+	memcpy_shifted_bits, memcpy_shifted_jt, memcpy_shifted_u8, memcpy_shifted_u8n, memcpy_shifted_h256, memcpy_shifted_h512,
+	memcpy_shifted_gb, memcpy_shifted_gs, memcpy_shifted_g, memcpy_v;
 
 static struct memcpy_func {
 	const char *name;
@@ -35,6 +36,9 @@ static struct memcpy_func {
 	{ "memcpy shifted, 8 word shifted loop", "u8n", memcpy_shifted_u8n },
 	{ "memcpy shifted, 8 word shifted loop from 256 B", "h256", memcpy_shifted_h256 },
 	{ "memcpy shifted, 8 word shifted loop from 512 B", "h512", memcpy_shifted_h512 },
+	{ "memcpy shifted, block loop 8 loads + 8 stores", "gb", memcpy_shifted_gb },
+	{ "memcpy shifted, shifted loop 4 loads/merges/stores", "gs", memcpy_shifted_gs },
+	{ "memcpy shifted, gb + gs", "g", memcpy_shifted_g },
 	{ "memcpy vector", "vector", memcpy_v },
 };
 

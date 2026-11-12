@@ -249,6 +249,45 @@ L(shifted_loop8):
         "Variant: shifted loop copies 8 words per iteration, then the word loop.",
         body.replace(LOOP4.group(0), LOOP8 + "L(shifted_word):\n"))
 
+# Loads grouped before the stores, on the glibc code with the 8 word shifted
+# loop: gb = aligned block loop as 8 loads + 8 stores twice, gs = shifted
+# loop as 4 loads + 4 merges + 4 stores twice, g = both.
+BLOCK_LOOP = re.search(r"^L\(block_loop\):\n.*?\tbne\ta6, a7, L\(block_loop\)\n",
+                       body, re.S | re.M)
+SHIFTED_LOOP8 = re.search(r"^L\(shifted_loop8\):\n.*?\tbne\ta6, t4, L\(shifted_loop8\)\n",
+                          body, re.S | re.M)
+if BLOCK_LOOP and SHIFTED_LOOP8:
+    R8 = ("a3", "a4", "a5", "t0", "t1", "t2", "t3", "t4")
+    gb = "L(block_loop):\n"
+    for h in (0, 8):
+        gb += "".join(f"\tREG_L\t{r}, ({h + i}*SZREG)(a1)\n" for i, r in enumerate(R8))
+        gb += "".join(f"\tREG_S\t{r}, ({h + i}*SZREG)(a6)\n" for i, r in enumerate(R8))
+    gb += ("\taddi\ta1, a1, BLOCK_SIZE\n\taddi\ta6, a6, BLOCK_SIZE\n"
+           "\tbne\ta6, a7, L(block_loop)\n")
+
+    def group(base, regs):
+        """REGS[0] holds word BASE; load words BASE+1..BASE+4 into REGS[1:],
+        merge, store words BASE..BASE+3.  The next carry ends in REGS[4]."""
+        s = "".join(f"\tREG_L\t{r}, ({base + i + 1}*SZREG)(a1)\n" for i, r in enumerate(regs[1:]))
+        for i in range(4):
+            s += (f"\tsrl\t{regs[i]}, {regs[i]}, t5\n\tsll\ta5, {regs[i + 1]}, t6\n"
+                  f"\tor\t{regs[i]}, {regs[i]}, a5\n")
+        s += "".join(f"\tREG_S\t{r}, ({base + i}*SZREG)(a6)\n" for i, r in enumerate(regs[:4]))
+        return s
+    gs = ("L(shifted_loop8):\n" + group(0, ("a4", "t0", "t1", "t2", "t3")) +
+          group(4, ("t3", "a4", "t0", "t1", "t2")) +
+          "\tmv\ta4, t2\n\taddi\ta1, a1, 8*SZREG\n\taddi\ta6, a6, 8*SZREG\n"
+          "\tbne\ta6, t4, L(shifted_loop8)\n")
+    variants["memcpy_shifted_gb"] = (
+        "Variant: aligned block loop as 8 loads then 8 stores, twice.",
+        body.replace(BLOCK_LOOP.group(0), gb))
+    variants["memcpy_shifted_gs"] = (
+        "Variant: 8 word shifted loop as 4 loads, 4 merges, 4 stores, twice.",
+        body.replace(SHIFTED_LOOP8.group(0), gs))
+    variants["memcpy_shifted_g"] = (
+        "Variant: both gb and gs.",
+        body.replace(BLOCK_LOOP.group(0), gb).replace(SHIFTED_LOOP8.group(0), gs))
+
 for name, (desc, code) in variants.items():
     with open(f"{name}.S", "w") as f:
         f.write(PROLOGUE.format(name=name, desc=desc) + code +

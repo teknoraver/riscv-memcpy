@@ -156,16 +156,16 @@ L(shifted):
 	neg	t6, t5
 	/* Round SRC down to a word boundary.  */
 	sub	a1, a1, a3
-	/* a7 = end of the whole words in DEST, t4 = end of the 4 word blocks.  */
+	/* a7 = end of the whole words in DEST, t4 = end of the 8 word blocks.  */
 	andi	a7, a2, -SZREG
 	add	a7, a6, a7
-	andi	t4, a2, -(4*SZREG)
+	andi	t4, a2, -(8*SZREG)
 	add	t4, a6, t4
 	/* a4 = the current aligned source word.  */
 	REG_L	a4, 0(a1)
-	beq	a6, t4, L(shifted_word)
+	beq	a6, t4, L(shifted_4)
 	.p2align 4
-L(shifted_loop4):
+L(shifted_loop8):
 	REG_L	t0,     SZREG(a1)
 	REG_L	t1, (2*SZREG)(a1)
 	srl	a4, a4, t5
@@ -185,10 +185,56 @@ L(shifted_loop4):
 	srl	t2, t2, t5
 	sll	t3, a4, t6
 	or	t2, t2, t3
-	addi	a1, a1, 4*SZREG
 	REG_S	t2, (3*SZREG)(a6)
+	REG_L	t0, (5*SZREG)(a1)
+	REG_L	t1, (6*SZREG)(a1)
+	srl	a4, a4, t5
+	sll	a5, t0, t6
+	or	a4, a4, a5
+	REG_L	t2, (7*SZREG)(a1)
+	REG_S	a4, (4*SZREG)(a6)
+	srl	t0, t0, t5
+	sll	t3, t1, t6
+	or	t0, t0, t3
+	REG_L	a4, (8*SZREG)(a1)
+	REG_S	t0, (5*SZREG)(a6)
+	srl	t1, t1, t5
+	sll	a5, t2, t6
+	or	t1, t1, a5
+	REG_S	t1, (6*SZREG)(a6)
+	srl	t2, t2, t5
+	sll	t3, a4, t6
+	or	t2, t2, t3
+	REG_S	t2, (7*SZREG)(a6)
+	addi	a1, a1, 8*SZREG
+	addi	a6, a6, 8*SZREG
+	bne	a6, t4, L(shifted_loop8)
+L(shifted_4):
+	/* At most one 4 word block is left.  */
+	andi	t4, a2, 4*SZREG
+	beqz	t4, L(shifted_word)
+	REG_L	t0,     SZREG(a1)
+	REG_L	t1, (2*SZREG)(a1)
+	srl	a4, a4, t5
+	sll	a5, t0, t6
+	or	a4, a4, a5
+	REG_L	t2, (3*SZREG)(a1)
+	REG_S	a4,         0(a6)
+	srl	t0, t0, t5
+	sll	t3, t1, t6
+	or	t0, t0, t3
+	REG_L	a4, (4*SZREG)(a1)
+	REG_S	t0,     SZREG(a6)
+	srl	t1, t1, t5
+	sll	a5, t2, t6
+	or	t1, t1, a5
+	REG_S	t1, (2*SZREG)(a6)
+	srl	t2, t2, t5
+	sll	t3, a4, t6
+	or	t2, t2, t3
+	REG_S	t2, (3*SZREG)(a6)
+	addi	a1, a1, 4*SZREG
 	addi	a6, a6, 4*SZREG
-	bne	a6, t4, L(shifted_loop4)
 L(shifted_word):
 	beq	a6, a7, L(shifted_tail)
 	.p2align 4
