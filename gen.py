@@ -219,6 +219,32 @@ L(shifted_4):
     variants["memcpy_shifted_u8"] = (
         "Variant: shifted loop copies 8 words per iteration, then one 4 word block.",
         body.replace(LOOP4.group(0), LOOP8 + BLOCK4 + "L(shifted_word):\n"))
+    # Hybrid: below THR bytes the 4 word loop as is; from THR an out of line
+    # 8 word loop first, then back to the 4 word loop.  a3 (SRC & 7) is free
+    # in the loops: it is restored from t5 before going back.
+    for thr in (256, 512):
+        ent = re.search(r"\tREG_L\ta4, 0\(a1\)\n\tbeq\ta6, t4, L\(shifted_word\)\n", body).group(0)
+        code = body.replace(ent, f"""\
+	REG_L	a4, 0(a1)
+	li	a3, {thr}
+	bgeu	a2, a3, L(shifted_big)
+L(shifted_4check):
+	beq	a6, t4, L(shifted_word)
+""")
+        code = code.replace("L(ret):\n\tret\n", "L(ret):\n\tret\n" + f"""\
+L(shifted_big):
+	andi	a3, a2, -(8*SZREG)
+	add	a3, a6, a3
+	.p2align 4
+L(shifted_loop8):
+""" + body4(0) + body4(4) + STEP(8) + """\
+	bne	a6, a3, L(shifted_loop8)
+	srli	a3, t5, 3
+	j	L(shifted_4check)
+""")
+        variants[f"memcpy_shifted_h{thr}"] = (
+            f"Variant: from {thr} bytes an out of line 8 word shifted loop, then the 4 word loop.",
+            code)
     variants["memcpy_shifted_u8n"] = (
         "Variant: shifted loop copies 8 words per iteration, then the word loop.",
         body.replace(LOOP4.group(0), LOOP8 + "L(shifted_word):\n"))
