@@ -1,12 +1,12 @@
 /* Call one memcpy 10^8 times with a fixed length, for perf stat:
-   ./len2 <libc|shifted|loop|bl2|bits|jt> <len> [dst offset] [src offset]  */
+   ./len2 <libc|shifted|loop|bl2|bits|jt|u8|u8n> <len> [dst offset] [src offset]  */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 typedef void *(memcpy_t)(void *, const void *, size_t);
 extern memcpy_t memcpy_shifted, memcpy_shifted_loop, memcpy_shifted_bl2, memcpy_shifted_bits,
-	memcpy_shifted_jt;
+	memcpy_shifted_jt, memcpy_shifted_u8, memcpy_shifted_u8n;
 
 static const struct { const char *tag; memcpy_t *func; } funcs[] = {
 	{ "libc", memcpy },
@@ -15,6 +15,8 @@ static const struct { const char *tag; memcpy_t *func; } funcs[] = {
 	{ "bl2", memcpy_shifted_bl2 },
 	{ "bits", memcpy_shifted_bits },
 	{ "jt", memcpy_shifted_jt },
+	{ "u8", memcpy_shifted_u8 },
+	{ "u8n", memcpy_shifted_u8n },
 };
 
 int main(int argc, char **argv)
@@ -41,6 +43,6 @@ int main(int argc, char **argv)
 	return 0;
 
 usage:
-	fprintf(stderr, "usage: %s <libc|shifted|loop|bl2|bits|jt> <len> [doff] [soff]\n", argv[0]);
+	fprintf(stderr, "usage: %s <libc|shifted|loop|bl2|bits|jt|u8|u8n> <len> [doff] [soff]\n", argv[0]);
 	return 1;
 }

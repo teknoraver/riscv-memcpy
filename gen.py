@@ -182,6 +182,47 @@ variants = {
 if not patchable:
     variants = {"memcpy_shifted": variants["memcpy_shifted"]}
 
+# Shifted loop unrolled to 8 words.  BODY4 is the 4 word loop body without
+# the pointer increments; the carry word is in a4 before and after it.
+LOOP4 = re.search(r"\tandi\tt4, a2, -\(4\*SZREG\)\n.*?^L\(shifted_word\):\n",
+                  body, re.S | re.M)
+if LOOP4:
+    BODY4 = re.search(r"^L\(shifted_loop4\):\n(.*)\tbne\ta6, t4, L\(shifted_loop4\)\n",
+                      LOOP4.group(0), re.S | re.M).group(1)
+    BODY4 = "".join(l + "\n" for l in BODY4.splitlines()
+                    if not re.match(r"\taddi\ta[16], a[16], 4\*SZREG", l))
+
+    def body4(words):
+        """BODY4 with SRC and DEST offsets moved by WORDS words."""
+        def fix(m):
+            n = int(m.group(1) or 1) if m.group(2) else 0
+            return f"({n + words}*SZREG)("
+        return re.sub(r"(?:\(?(\d*)\*?(SZREG)\)?|\b0)\((?=a[16]\))", fix, BODY4)
+
+    STEP = lambda n: f"\taddi\ta1, a1, {n}*SZREG\n\taddi\ta6, a6, {n}*SZREG\n"
+    LOOP8 = ("""\
+	andi	t4, a2, -(8*SZREG)
+	add	t4, a6, t4
+	/* a4 = the current aligned source word.  */
+	REG_L	a4, 0(a1)
+	beq	a6, t4, L(shifted_4)
+	.p2align 4
+L(shifted_loop8):
+""" + body4(0) + body4(4) + STEP(8) + """\
+	bne	a6, t4, L(shifted_loop8)
+L(shifted_4):
+""")
+    BLOCK4 = ("""\
+	andi	t4, a2, 4*SZREG
+	beqz	t4, L(shifted_word)
+""" + body4(0) + STEP(4))
+    variants["memcpy_shifted_u8"] = (
+        "Variant: shifted loop copies 8 words per iteration, then one 4 word block.",
+        body.replace(LOOP4.group(0), LOOP8 + BLOCK4 + "L(shifted_word):\n"))
+    variants["memcpy_shifted_u8n"] = (
+        "Variant: shifted loop copies 8 words per iteration, then the word loop.",
+        body.replace(LOOP4.group(0), LOOP8 + "L(shifted_word):\n"))
+
 for name, (desc, code) in variants.items():
     with open(f"{name}.S", "w") as f:
         f.write(PROLOGUE.format(name=name, desc=desc) + code +
