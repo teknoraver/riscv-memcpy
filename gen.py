@@ -288,6 +288,34 @@ if BLOCK_LOOP and SHIFTED_LOOP8:
         "Variant: both gb and gs.",
         body.replace(BLOCK_LOOP.group(0), gb).replace(SHIFTED_LOOP8.group(0), gs))
 
+# Aligned loop with 10 words per iteration (all 10 free registers), loads
+# before stores.  80 is not a power of 2: loop while 10 words still fit.
+ALIGNED = re.search(r"\t/\* Both aligned\.  If LEN < BLOCK_SIZE jump to word copy\.  \*/\n"
+                    r".*?\tandi\ta2, a2, BLOCK_SIZE-1\n", body, re.S)
+if ALIGNED:
+    R10 = ("a3", "a4", "a5", "t0", "t1", "t2", "t3", "t4", "t5", "t6")
+    w10 = ("""\
+	/* Both aligned.  If LEN < 10 words jump to word copy.  */
+	li	a4, 10*SZREG
+	bltu	a2, a4, L(word_copy)
+	/* a7 = the last DEST position where 10 words still fit.  */
+	add	a7, a6, a2
+	addi	a7, a7, -10*SZREG
+	.p2align 4
+L(block_loop):
+""" + "".join(f"\tREG_L\t{r}, ({i}*SZREG)(a1)\n" for i, r in enumerate(R10))
+        + "".join(f"\tREG_S\t{r}, ({i}*SZREG)(a6)\n" for i, r in enumerate(R10)) + """\
+	addi	a1, a1, 10*SZREG
+	addi	a6, a6, 10*SZREG
+	bleu	a6, a7, L(block_loop)
+	/* 0 <= LEN < 10 words.  */
+	sub	a2, a7, a6
+	addi	a2, a2, 10*SZREG
+""")
+    variants["memcpy_shifted_w10"] = (
+        "Variant: aligned loop copies 10 words per iteration, 10 loads then 10 stores.",
+        body.replace(ALIGNED.group(0), w10))
+
 for name, (desc, code) in variants.items():
     with open(f"{name}.S", "w") as f:
         f.write(PROLOGUE.format(name=name, desc=desc) + code +
