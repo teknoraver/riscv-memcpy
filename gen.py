@@ -316,6 +316,47 @@ L(block_loop):
         "Variant: aligned loop copies 10 words per iteration, 10 loads then 10 stores.",
         body.replace(ALIGNED.group(0), w10))
 
+# Short/medium aligned copies without loops (2026-11-13):
+# wb   = aligned LEN < BLOCK_SIZE in word blocks of 8/4/2/1 words (bits of LEN)
+#        instead of the one-word loop;
+# sa   = below 16 bytes, ld/sd (lw/sw) for the 8 (4) byte block when both
+#        pointers are 8 (4) byte aligned;
+# wbsa = both.
+WORD_LOOP = re.search(r"^L\(word_copy\):\n.*?\tbne\ta6, a7, L\(word_loop\)\n", body, re.S | re.M)
+BC8 = re.search(r"^L\(byte_copy\):\n# if SZREG == 8\n\tandi\ta3, a2, 8\n\tbeqz\ta3, 1f\n(.*?)\taddi\ta1, a1, 8\n\taddi\ta6, a6, 8\n1:\n# endif\n", body, re.S | re.M)
+BC4 = re.search(r"\tandi\ta3, a2, 4\n\tbeqz\ta3, 2f\n(.*?)\taddi\ta1, a1, 4\n\taddi\ta6, a6, 4\n2:\n", body[BC8.end():] if BC8 else "", re.S)
+if WORD_LOOP and BC8 and BC4:
+    def words(n):
+        regs = ("a3", "a4", "a5", "t0")
+        out = ""
+        for g in range(0, n, 4):
+            k = min(4, n - g)
+            out += "".join(f"\tREG_L\t{regs[i]}, ({g + i}*SZREG)(a1)\n" for i in range(k))
+            out += "".join(f"\tREG_S\t{regs[i]}, ({g + i}*SZREG)(a6)\n" for i in range(k))
+        return out + f"\taddi\ta1, a1, {n}*SZREG\n\taddi\ta6, a6, {n}*SZREG\n"
+    wb = ("L(word_copy):\n"
+          "\t/* Copy 8, 4, 2 and 1 words selected by the bits of LEN.  */\n"
+          "\tandi\ta3, a2, 8*SZREG\n\tbeqz\ta3, 1f\n" + words(8) +
+          "1:\n\tandi\ta3, a2, 4*SZREG\n\tbeqz\ta3, 2f\n" + words(4) +
+          "2:\n\tandi\ta3, a2, 2*SZREG\n\tbeqz\ta3, 3f\n" + words(2) +
+          "3:\n\tandi\ta3, a2, SZREG\n\tbeqz\ta3, L(aligned_tail)\n" + words(1))
+    sa8 = ("L(byte_copy):\n# if SZREG == 8\n\tandi\ta3, a2, 8\n\tbeqz\ta3, 1f\n"
+           "\tor\ta4, a6, a1\n\tandi\ta4, a4, 7\n\tbnez\ta4, L(bc8_bytes)\n"
+           "\tld\ta3, 0(a1)\n\tsd\ta3, 0(a6)\n\tj\tL(bc8_done)\nL(bc8_bytes):\n" + BC8.group(1) +
+           "L(bc8_done):\n\taddi\ta1, a1, 8\n\taddi\ta6, a6, 8\n1:\n# endif\n")
+    sa4 = ("\tandi\ta3, a2, 4\n\tbeqz\ta3, 2f\n"
+           "\tor\ta4, a6, a1\n\tandi\ta4, a4, 3\n\tbnez\ta4, L(bc4_bytes)\n"
+           "\tlw\ta3, 0(a1)\n\tsw\ta3, 0(a6)\n\tj\tL(bc4_done)\nL(bc4_bytes):\n" + BC4.group(1) +
+           "L(bc4_done):\n\taddi\ta1, a1, 4\n\taddi\ta6, a6, 4\n2:\n")
+    sa = lambda c: c.replace(BC8.group(0), sa8).replace(BC4.group(0), sa4)
+    variants["memcpy_shifted_wb"] = ("Variant: aligned LEN < BLOCK_SIZE in 8/4/2/1 word blocks, no word loop.",
+                                     body.replace(WORD_LOOP.group(0), wb))
+    variants["memcpy_shifted_sa"] = ("Variant: ld/sd and lw/sw for the 8 and 4 byte blocks below 16 bytes when aligned.",
+                                     sa(body))
+    variants["memcpy_shifted_wbsa"] = ("Variant: wb + sa.", sa(body.replace(WORD_LOOP.group(0), wb)))
+else:
+    print("wb/sa: patterns not found", bool(WORD_LOOP), bool(BC8), bool(BC4))
+
 for name, (desc, code) in variants.items():
     with open(f"{name}.S", "w") as f:
         f.write(PROLOGUE.format(name=name, desc=desc) + code +

@@ -8,7 +8,8 @@ typedef void *(memcpy_t)(void *, const void *, size_t);
 extern memcpy_t memcpy_shifted, memcpy_shifted_loop, memcpy_shifted_bl2, memcpy_shifted_bits,
 	memcpy_shifted_jt, memcpy_shifted_u8, memcpy_shifted_u8n,
 	memcpy_shifted_h256, memcpy_shifted_h512,
-	memcpy_shifted_gb, memcpy_shifted_gs, memcpy_shifted_g, memcpy_shifted_w10;
+	memcpy_shifted_gb, memcpy_shifted_gs, memcpy_shifted_g, memcpy_shifted_w10,
+	memcpy_shifted_wb, memcpy_shifted_sa, memcpy_shifted_wbsa;
 
 static const struct { const char *tag; memcpy_t *func; } funcs[] = {
 	{ "libc", memcpy },
@@ -25,6 +26,9 @@ static const struct { const char *tag; memcpy_t *func; } funcs[] = {
 	{ "gs", memcpy_shifted_gs },
 	{ "g", memcpy_shifted_g },
 	{ "w10", memcpy_shifted_w10 },
+	{ "wb", memcpy_shifted_wb },
+	{ "sa", memcpy_shifted_sa },
+	{ "wbsa", memcpy_shifted_wbsa },
 };
 
 int main(int argc, char **argv)
