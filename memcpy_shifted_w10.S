@@ -98,19 +98,64 @@ L(block_loop):
 	/* 0 <= LEN < 10 words.  */
 	sub	a2, a7, a6
 	addi	a2, a2, 10*SZREG
+	/* Skip the word blocks if no whole word is left.  Coming from the
+	   entry LEN >= SZREG + 1 here, so the check is only needed after
+	   the block loop.  */
+	andi	a3, a2, -SZREG
+	beqz	a3, L(aligned_tail)
 
-	/* 0 <= LEN < BLOCK_SIZE, SRC and DEST aligned.  */
+	/* 0 <= LEN < BLOCK_SIZE, SRC and DEST aligned.  Copy 8, 4, 2 and 1
+	   words selected by the bits of LEN, without loops.  */
 L(word_copy):
-	andi	a7, a2, -SZREG
-	beqz	a7, L(aligned_tail)
-	add	a7, a6, a7
-	.p2align 4
-L(word_loop):
+	andi	a3, a2, 8*SZREG
+	beqz	a3, 1f
 	REG_L	a3, 0(a1)
-	addi	a1, a1, SZREG
+	REG_L	a4, SZREG(a1)
+	REG_L	a5, (2*SZREG)(a1)
+	REG_L	t0, (3*SZREG)(a1)
 	REG_S	a3, 0(a6)
+	REG_S	a4, SZREG(a6)
+	REG_S	a5, (2*SZREG)(a6)
+	REG_S	t0, (3*SZREG)(a6)
+	REG_L	a3, (4*SZREG)(a1)
+	REG_L	a4, (5*SZREG)(a1)
+	REG_L	a5, (6*SZREG)(a1)
+	REG_L	t0, (7*SZREG)(a1)
+	REG_S	a3, (4*SZREG)(a6)
+	REG_S	a4, (5*SZREG)(a6)
+	REG_S	a5, (6*SZREG)(a6)
+	REG_S	t0, (7*SZREG)(a6)
+	addi	a1, a1, 8*SZREG
+	addi	a6, a6, 8*SZREG
+1:
+	andi	a3, a2, 4*SZREG
+	beqz	a3, 2f
+	REG_L	a3, 0(a1)
+	REG_L	a4, SZREG(a1)
+	REG_L	a5, (2*SZREG)(a1)
+	REG_L	t0, (3*SZREG)(a1)
+	REG_S	a3, 0(a6)
+	REG_S	a4, SZREG(a6)
+	REG_S	a5, (2*SZREG)(a6)
+	REG_S	t0, (3*SZREG)(a6)
+	addi	a1, a1, 4*SZREG
+	addi	a6, a6, 4*SZREG
+2:
+	andi	a3, a2, 2*SZREG
+	beqz	a3, 3f
+	REG_L	a3, 0(a1)
+	REG_L	a4, SZREG(a1)
+	REG_S	a3, 0(a6)
+	REG_S	a4, SZREG(a6)
+	addi	a1, a1, 2*SZREG
+	addi	a6, a6, 2*SZREG
+3:
+	andi	a3, a2, SZREG
+	beqz	a3, L(aligned_tail)
+	REG_L	a3, 0(a1)
+	REG_S	a3, 0(a6)
+	addi	a1, a1, SZREG
 	addi	a6, a6, SZREG
-	bne	a6, a7, L(word_loop)
 
 	/* 0 <= LEN & (SZREG-1) < SZREG, SRC and DEST aligned, so every
 	   access below is naturally aligned.  */
