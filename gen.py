@@ -349,6 +349,10 @@ if WORD_LOOP and BC8 and BC4:
            "\tlw\ta3, 0(a1)\n\tsw\ta3, 0(a6)\n\tj\tL(bc4_done)\nL(bc4_bytes):\n" + BC4.group(1) +
            "L(bc4_done):\n\taddi\ta1, a1, 4\n\taddi\ta6, a6, 4\n2:\n")
     sa = lambda c: c.replace(BC8.group(0), sa8).replace(BC4.group(0), sa4)
+    wb2 = wb.replace("L(word_copy):\n", "L(word_copy):\n\t/* Nothing left in whole words: straight to the tail.  */\n"
+                     "\tandi\ta3, a2, -SZREG\n\tbeqz\ta3, L(aligned_tail)\n", 1)
+    variants["memcpy_shifted_wb2"] = ("Variant: wb, with the no-whole-words check first (multiples of 128).",
+                                      body.replace(WORD_LOOP.group(0), wb2))
     variants["memcpy_shifted_wb"] = ("Variant: aligned LEN < BLOCK_SIZE in 8/4/2/1 word blocks, no word loop.",
                                      body.replace(WORD_LOOP.group(0), wb))
     variants["memcpy_shifted_sa"] = ("Variant: ld/sd and lw/sw for the 8 and 4 byte blocks below 16 bytes when aligned.",
