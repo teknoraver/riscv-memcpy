@@ -353,6 +353,14 @@ if WORD_LOOP and BC8 and BC4:
                      "\tandi\ta3, a2, -SZREG\n\tbeqz\ta3, L(aligned_tail)\n", 1)
     variants["memcpy_shifted_wb2"] = ("Variant: wb, with the no-whole-words check first (multiples of 128).",
                                       body.replace(WORD_LOOP.group(0), wb2))
+    # wb3: the no-whole-words check only after the block loop; from the
+    # entry LEN >= 9 here (>= 16 minus at most 7 to align DEST).
+    EXIT = "\tandi\ta2, a2, BLOCK_SIZE-1\n"
+    assert body.count(EXIT) == 1
+    wb3_body = body.replace(WORD_LOOP.group(0), wb).replace(EXIT, EXIT +
+        "\t/* Nothing left in whole words: straight to the tail.  */\n"
+        "\tandi\ta3, a2, -SZREG\n\tbeqz\ta3, L(aligned_tail)\n")
+    variants["memcpy_shifted_wb3"] = ("Variant: wb, no-whole-words check only after the block loop.", wb3_body)
     variants["memcpy_shifted_wb"] = ("Variant: aligned LEN < BLOCK_SIZE in 8/4/2/1 word blocks, no word loop.",
                                      body.replace(WORD_LOOP.group(0), wb))
     variants["memcpy_shifted_sa"] = ("Variant: ld/sd and lw/sw for the 8 and 4 byte blocks below 16 bytes when aligned.",
